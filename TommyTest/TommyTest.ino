@@ -37,7 +37,8 @@ Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC);
 
 // Size of the color selection boxes and the paintbrush size
 #define BOXSIZE 120
-#define PENRADIUS 3
+#define MIN_SPEED 0
+#define MAX_SPEED 20
 int currentspeed;
 bool isrunning;
 
@@ -104,15 +105,27 @@ void loop()
   if (p.y < BOXSIZE) {
      setRunState(p.x < BOXSIZE);
   } else if (p.y < 2*BOXSIZE) {
-     if (p.x < BOXSIZE) { 
-       currentspeed++;
-     } else {
-       currentspeed--;
-     }
-     
+     updateSpeed(p.x < BOXSIZE);    
      drawCurrentSpeed(currentspeed);
   }
   
+  clearBuffer();
+}
+
+void clearBuffer() {
+  while (!ts.bufferEmpty()) {
+    ts.getPoint();
+  } 
+}
+
+void updateSpeed(bool increment) {
+  if (increment) {
+    if (currentspeed + 1 > MAX_SPEED) return;
+    currentspeed++;
+  } else {
+    if (currentspeed - 1 < MIN_SPEED) return;
+    currentspeed--;    
+  }
 }
 
 void setRunState(bool runstate) {
