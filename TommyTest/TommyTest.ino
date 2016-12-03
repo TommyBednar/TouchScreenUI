@@ -37,6 +37,8 @@ Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC);
 #define BOXSIZE 120
 #define MIN_SPEED 1
 #define MAX_SPEED 50
+#define RESET_SPEED 200
+#define DELAY_CONSTANT 7200000
 int steppin;
 int dirpin;
 int LEDmove;
@@ -65,7 +67,7 @@ void setup(void) {
 
 
   tft.fillScreen(ILI9341_BLACK);
-  currentspeed = (MIN_SPEED + MAX_SPEED)/2;
+  currentspeed = 5;
 
   drawStart();
   drawReset();
@@ -222,7 +224,7 @@ void drawCurrentSpeed(int currentspeed) {
 
 void convertSpeed(int givenspeed)
 {
-    speeddelay = 2000000 / givenspeed;
+    speeddelay = DELAY_CONSTANT / givenspeed;
 }
 
 void moveBlock(bool givendir, bool whereStop)
@@ -238,7 +240,7 @@ void moveBlock(bool givendir, bool whereStop)
     {
        digitalWrite(dirpin, HIGH);
        //digitalWrite(LEDmove, HIGH);
-       convertSpeed(MAX_SPEED);  // reset at maximum speed
+       convertSpeed(RESET_SPEED);  // reset at maximum speed
        //if(stopPressed == true)
          //currentdistance = tempdistance;
        //else
