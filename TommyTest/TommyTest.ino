@@ -1,14 +1,12 @@
 /***************************************************
   This is our touchscreen painting example for the Adafruit ILI9341 Shield
   ----> http://www.adafruit.com/products/1651
-
   Check out the links above for our tutorials and wiring diagrams
   These displays use SPI to communicate, 4 or 5 pins are required to
   interface (RST is optional)
   Adafruit invests time and resources providing this open source code,
   please support Adafruit and open-source hardware by purchasing
   products from Adafruit!
-
   Written by Limor Fried/Ladyada for Adafruit Industries.
   MIT license, all text above must be included in any redistribution
  ****************************************************/
@@ -37,36 +35,58 @@ Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC);
 
 // Size of the color selection boxes and the paintbrush size
 #define BOXSIZE 120
-#define MIN_SPEED 0
-#define MAX_SPEED 20
+#define MIN_SPEED 1
+#define MAX_SPEED 50
+int steppin;
+int dirpin;
+int LEDmove;
+int LEDreset;
 int currentspeed;
-bool isrunning;
+int speeddelay;
+int currentdistance;
+int tempdistance;
+bool isrunning = false;
+bool stopPressed = false;
+int i;
 
 void setup(void) {
  // while (!Serial);     // used for leonardo debugging
- 
+
   Serial.begin(9600);
   Serial.println(F("Touch Paint!"));
-  
-  tft.begin();
 
+  tft.begin();
+  tft.setRotation(2);
   if (!ts.begin()) {
     Serial.println("Couldn't start touchscreen controller");
     while (1);
   }
   Serial.println("Touchscreen started");
-  
-  
+
+
   tft.fillScreen(ILI9341_BLACK);
-  
+  currentspeed = (MIN_SPEED + MAX_SPEED)/2;
+
   drawStart();
   drawReset();
   drawIncrement();
   drawDecrement();
   drawSpeed();
   drawCurrentSpeed(currentspeed);
- 
-  setRunState(true);
+  
+  convertSpeed(currentspeed);
+  steppin = 22;
+  dirpin = 24;
+  LEDmove = 30;
+  LEDreset = 32;
+  pinMode(steppin, OUTPUT);
+  pinMode(dirpin, OUTPUT);
+  pinMode(LEDmove, OUTPUT);
+  pinMode(LEDreset, OUTPUT);
+  digitalWrite(steppin, LOW);
+  digitalWrite(dirpin, LOW);
+  currentdistance = 500;
+  tempdistance = 500;
 }
 
 
@@ -83,75 +103,96 @@ void loop()
   }
   */
 
-  // Retrieve a point  
+  // Retrieve a point
   TS_Point p = ts.getPoint();
-  
- /*
-  Serial.print("X = "); Serial.print(p.x);
-  Serial.print("\tY = "); Serial.print(p.y);
-  Serial.print("\tPressure = "); Serial.println(p.z);  
- */
- 
+
   // Scale from ~0->4000 to tft.width using the calibration #'s
   p.x = map(p.x, TS_MINX, TS_MAXX, 0, tft.width());
   p.y = map(p.y, TS_MINY, TS_MAXY, 0, tft.height());
 
-  
-//  Serial.print("("); Serial.print(p.x);
-//  Serial.print(", "); Serial.print(p.y);
-//  Serial.println(")");
-  
+  p.x = tft.width() - p.x;
+  p.y = tft.height() - p.y;
 
-  if (p.y < BOXSIZE) {
+  if (p.y < BOXSIZE)
+  {
      setRunState(p.x < BOXSIZE);
-  } else if (p.y < 2*BOXSIZE) {
-     updateSpeed(p.x < BOXSIZE);    
+  }
+  else if (p.y < 2*BOXSIZE)
+  {
+     updateSpeed(p.x < BOXSIZE);
      drawCurrentSpeed(currentspeed);
   }
-  
+
   clearBuffer();
 }
 
 void clearBuffer() {
-  while (!ts.bufferEmpty()) {
+  while (!ts.bufferEmpty())
+  {
     ts.getPoint();
-  } 
+  }
 }
 
 void updateSpeed(bool increment) {
-  if (increment) {
-    if (currentspeed + 1 > MAX_SPEED) return;
+  if (increment)
+  {
+    if (currentspeed + 1 > MAX_SPEED)
+      return;
     currentspeed++;
-  } else {
-    if (currentspeed - 1 < MIN_SPEED) return;
-    currentspeed--;    
+  }
+  else
+  {
+    if (currentspeed - 1 < MIN_SPEED)
+      return;
+    currentspeed--;
   }
 }
 
 void setRunState(bool runstate) {
-  if (isrunning == runstate) return;
+
   isrunning = runstate;
-  if (runstate) {
-    tft.drawRect(0, 0, BOXSIZE, BOXSIZE, ILI9341_WHITE);
-    drawReset();
-  } else {
-    tft.drawRect(BOXSIZE, 0, BOXSIZE, BOXSIZE, ILI9341_WHITE);
-    drawStart();
+  boolean dirneeded = true;
+  if (runstate)
+  {
+    //tft.drawRect(0, 0, BOXSIZE, BOXSIZE, ILI9341_WHITE);
+    drawStop(true);
+    dirneeded = false;
+    moveBlock(dirneeded, true);
+  }
+  else
+  {
+    //tft.drawRect(BOXSIZE, 0, BOXSIZE, BOXSIZE, ILI9341_WHITE);
+    drawStop(false);
+    dirneeded = true;
+    moveBlock(dirneeded, false);
   }
 }
 
 void drawStart() {
-    tft.fillRect(0, 0, BOXSIZE, BOXSIZE, ILI9341_BLUE);
+    tft.fillRect(0, 0, BOXSIZE, BOXSIZE, ILI9341_GREEN);
     tft.setTextColor(ILI9341_WHITE);  tft.setTextSize(3);
     tft.setCursor(0.1*BOXSIZE, 0.4*BOXSIZE);
     tft.println("Start");
 }
 
 void drawReset() {
-    tft.fillRect(BOXSIZE, 0, BOXSIZE, BOXSIZE, ILI9341_RED);
+    tft.fillRect(BOXSIZE, 0, BOXSIZE, BOXSIZE, ILI9341_BLUE);
     tft.setTextColor(ILI9341_WHITE);  tft.setTextSize(3);
     tft.setCursor(1.1*BOXSIZE, 0.4*BOXSIZE);
     tft.println("Reset");
+}
+
+void drawStop(bool pickbox) {
+    if(pickbox == false)
+      tft.fillRect(BOXSIZE, 0, BOXSIZE, BOXSIZE, ILI9341_RED);
+    else
+      tft.fillRect(0, 0, BOXSIZE, BOXSIZE, ILI9341_RED);
+    tft.setTextColor(ILI9341_WHITE);  tft.setTextSize(3);
+    if(pickbox == false)
+      tft.setCursor(1.1*BOXSIZE, 0.4*BOXSIZE);
+    else
+      tft.setCursor(0.1*BOXSIZE, 0.4*BOXSIZE);
+    tft.println("Stop");
 }
 
 void drawIncrement() {
@@ -177,4 +218,81 @@ void drawCurrentSpeed(int currentspeed) {
      tft.fillRect(BOXSIZE, 2*BOXSIZE, BOXSIZE, BOXSIZE, ILI9341_BLACK);
      tft.setCursor(1.35*BOXSIZE, 2.4*BOXSIZE);
      tft.println(currentspeed);
+}
+
+void convertSpeed(int givenspeed)
+{
+    speeddelay = 2000000 / givenspeed;
+}
+
+void moveBlock(bool givendir, bool whereStop)
+{
+    if(givendir == false)
+    {
+       digitalWrite(dirpin, LOW);
+       //digitalWrite(LEDreset, HIGH);
+       convertSpeed(currentspeed);
+       currentdistance = 400;
+    }
+    else
+    {
+       digitalWrite(dirpin, HIGH);
+       //digitalWrite(LEDmove, HIGH);
+       convertSpeed(MAX_SPEED);  // reset at maximum speed
+       //if(stopPressed == true)
+         //currentdistance = tempdistance;
+       //else
+         currentdistance = 400;
+    }
+    
+    delay(1000);
+    clearBuffer();
+
+    for(i = 1; i <= currentdistance; i++)
+    {
+       if(!ts.bufferEmpty())
+       {
+         TS_Point p = ts.getPoint();
+
+         // Scale from ~0->4000 to tft.width using the calibration #'s
+         p.x = map(p.x, TS_MINX, TS_MAXX, 0, tft.width());
+         p.y = map(p.y, TS_MINY, TS_MAXY, 0, tft.height());
+
+         p.x = tft.width() - p.x;
+         p.y = tft.height() - p.y;
+         if (p.y < BOXSIZE)
+         {
+           if(p.x < BOXSIZE && whereStop == true)
+           {
+             tempdistance = i;
+             stopPressed = true;
+             break;
+           }
+           else if(p.x > BOXSIZE && whereStop == false)
+           {
+             tempdistance = i;
+             stopPressed = true;
+             break;
+           }
+         }
+         stopPressed = false;
+       }
+
+        /*
+        if(ts.touched())
+        {
+           TS_Point p = ts.getPoint();
+          p.x
+        }
+        */
+
+       digitalWrite(steppin, HIGH);
+       delay(1);
+       digitalWrite(steppin, LOW);
+       delayMicroseconds(speeddelay);
+    }
+      drawStart();
+      drawReset();
+      //digitalWrite(LEDmove, LOW);
+      //digitalWrite(LEDreset, LOW);
 }
