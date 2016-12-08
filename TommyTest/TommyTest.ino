@@ -41,11 +41,13 @@ Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC);
 #define DELAY_CONSTANT 7200000
 int steppin;
 int dirpin;
+int drivecontrolpin;
 int LEDmove;
 int LEDreset;
 int currentspeed;
 int speeddelay;
 int currentdistance;
+int remainingdistance;
 int tempdistance;
 bool isrunning = false;
 bool stopPressed = false;
@@ -75,20 +77,24 @@ void setup(void) {
   drawDecrement();
   drawSpeed();
   drawCurrentSpeed(currentspeed);
-  
+
   convertSpeed(currentspeed);
   steppin = 22;
   dirpin = 24;
+  drivecontrolpin = 26;
   LEDmove = 30;
   LEDreset = 32;
   pinMode(steppin, OUTPUT);
   pinMode(dirpin, OUTPUT);
   pinMode(LEDmove, OUTPUT);
   pinMode(LEDreset, OUTPUT);
+  //pinMode(drivecontrolpin, OUTPUT);
+  //digitalWrite(drivecontrolpin, LOW);
   digitalWrite(steppin, LOW);
   digitalWrite(dirpin, LOW);
-  currentdistance = 500;
-  tempdistance = 500;
+  currentdistance = 125;
+  remainingdistance = 275;
+  tempdistance = 400;
 }
 
 
@@ -156,14 +162,12 @@ void setRunState(bool runstate) {
   boolean dirneeded = true;
   if (runstate)
   {
-    //tft.drawRect(0, 0, BOXSIZE, BOXSIZE, ILI9341_WHITE);
     drawStop(true);
     dirneeded = false;
     moveBlock(dirneeded, true);
   }
   else
   {
-    //tft.drawRect(BOXSIZE, 0, BOXSIZE, BOXSIZE, ILI9341_WHITE);
     drawStop(false);
     dirneeded = true;
     moveBlock(dirneeded, false);
@@ -211,12 +215,15 @@ void drawDecrement() {
 
 void drawSpeed() {
   tft.setTextColor(ILI9341_WHITE);  tft.setTextSize(3);
-  tft.setCursor(0.1*BOXSIZE, 2.4*BOXSIZE);
+  tft.setCursor(0.1*BOXSIZE, 2.3*BOXSIZE);
   tft.println("Speed");
+  tft.setTextSize(2);
+  tft.setCursor(.1*BOXSIZE, 2.5*BOXSIZE);
+  tft.println("(mm/min)");
 }
 
 void drawCurrentSpeed(int currentspeed) {
-     tft.setTextColor(ILI9341_WHITE);  tft.setTextSize(3);
+givendir == false     tft.setTextColor(ILI9341_WHITE);  tft.setTextSize(3);
      tft.fillRect(BOXSIZE, 2*BOXSIZE, BOXSIZE, BOXSIZE, ILI9341_BLACK);
      tft.setCursor(1.35*BOXSIZE, 2.4*BOXSIZE);
      tft.println(currentspeed);
@@ -229,27 +236,28 @@ void convertSpeed(int givenspeed)
 
 void moveBlock(bool givendir, bool whereStop)
 {
-    if(givendir == false)
+    if(!givendir)
     {
        digitalWrite(dirpin, LOW);
-       //digitalWrite(LEDreset, HIGH);
+       digitalWrite(LEDmove, HIGH);
        convertSpeed(currentspeed);
-       currentdistance = 400;
+       currentdistance = 125;
+       remainingdistance = 275;
     }
     else
     {
        digitalWrite(dirpin, HIGH);
-       //digitalWrite(LEDmove, HIGH);
+       digitalWrite(LEDreset, HIGH);
        convertSpeed(RESET_SPEED);  // reset at maximum speed
        //if(stopPressed == true)
          //currentdistance = tempdistance;
        //else
          currentdistance = 400;
     }
-    
+
     delay(1000);
     clearBuffer();
-
+    //digitalWrite(drivecontrolpin, HIGH);
     for(i = 1; i <= currentdistance; i++)
     {
        if(!ts.bufferEmpty())
@@ -280,21 +288,53 @@ void moveBlock(bool givendir, bool whereStop)
          stopPressed = false;
        }
 
-        /*
-        if(ts.touched())
-        {
-           TS_Point p = ts.getPoint();
-          p.x
-        }
-        */
-
        digitalWrite(steppin, HIGH);
        delay(1);
        digitalWrite(steppin, LOW);
        delayMicroseconds(speeddelay);
     }
+
+    if(givendir == false)
+    {
+        convertSpeed(RESET_SPEED);
+          for(i = 1; i <= remainingdistance; i++)
+          {
+             if(!ts.bufferEmpty())
+             {
+               TS_Point p = ts.getPoint();
+
+               // Scale from ~0->4000 to tft.width using the calibration #'s
+               p.x = map(p.x, TS_MINX, TS_MAXX, 0, tft.width());
+               p.y = map(p.y, TS_MINY, TS_MAXY, 0, tft.height());
+
+               p.x = tft.width() - p.x;
+               p.y = tft.height() - p.y;
+               if (p.y < BOXSIZE)
+               {
+                 if(p.x < BOXSIZE && whereStop == true)
+                 {
+                   tempdistance = i;
+                   stopPressed = true;
+                   break;
+                 }
+                 else if(p.x > BOXSIZE && whereStop == false)
+                 {
+                    tempdistance = i;
+                    stopPressed = true;
+                   break;
+                 }
+               }
+               stopPressed = false;
+             }
+            digitalWrite(steppin, HIGH);
+            delay(1);
+            digitalWrite(steppin, LOW);
+            delayMicroseconds(speeddelay);
+         }
+    }
+    //digitalWrite(drivecontrolpin, LOW);
       drawStart();
       drawReset();
-      //digitalWrite(LEDmove, LOW);
-      //digitalWrite(LEDreset, LOW);
+      digitalWrite(LEDmove, LOW);
+      digitalWrite(LEDreset, LOW);
 }
